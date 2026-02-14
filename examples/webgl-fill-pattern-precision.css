@@ -1,0 +1,10 @@
+#info {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-family: monospace;
+  font-size: 14px;
+  border-radius: 4px;
+  margin-top: 8px;
+  display: inline-block;
+}

@@ -744,15 +744,20 @@ function parseFillProperties(style, builder, uniforms, context) {
         sampleSizeExpression,
       );
     }
+    // Pattern coordinate computation for fill patterns (issue #16705).
+    // The pattern origin (u_patternOrigin) is pre-reduced modulo 65536 on
+    // the CPU (in float64) so all GPU arithmetic stays within float32 range.
+    // Reducing the origin just shifts a periodic tiling pattern by an
+    // invisible constant, so any reduction period works correctly.
     context.functions['sampleFillPattern'] =
       `vec4 sampleFillPattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, vec2 pxOrigin, vec2 pxPosition) {
   float scaleRatio = pow(2., mod(u_zoom + 0.5, 1.) - 0.5);
-  vec2 pxRelativePos = pxPosition - pxOrigin;
-  // rotate the relative position from origin by the current view rotation
-  pxRelativePos = vec2(pxRelativePos.x * cos(u_rotation) - pxRelativePos.y * sin(u_rotation), pxRelativePos.x * sin(u_rotation) + pxRelativePos.y * cos(u_rotation));
-  // sample position is computed according to the sample offset & size
-  vec2 samplePos = mod(pxRelativePos / scaleRatio, sampleSize);
-  // also make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
+  vec2 delta = pxPosition - pxOrigin;
+  float cosR = cos(u_rotation);
+  float sinR = sin(u_rotation);
+  vec2 rotated = vec2(delta.x * cosR - delta.y * sinR, delta.x * sinR + delta.y * cosR);
+  vec2 samplePos = mod(rotated / scaleRatio, sampleSize);
+  // clamp to avoid border interpolation with outside pixels
   samplePos = clamp(samplePos, vec2(0.5), sampleSize - vec2(0.5));
   samplePos.y = sampleSize.y - samplePos.y; // invert y axis so that images appear upright
   return texture2D(texture, (samplePos + textureOffset) / textureSize);

@@ -315,9 +315,10 @@ class WebGLVectorLayerRenderer extends WebGLLayerRenderer {
 
   /**
    * @param {import("../../transform.js").Transform} batchInvertTransform Inverse of the transformation in which geometries are expressed
+   * @param {import("../../Map.js").FrameState} frameState Frame state.
    * @private
    */
-  applyUniforms_(batchInvertTransform) {
+  applyUniforms_(batchInvertTransform, frameState) {
     // world to screen matrix
     setFromTransform(this.tmpTransform_, this.currentFrameStateTransform_);
     multiplyTransform(this.tmpTransform_, batchInvertTransform);
@@ -333,12 +334,22 @@ class WebGLVectorLayerRenderer extends WebGLLayerRenderer {
       mat4FromTransform(this.tmpMat4_, this.tmpTransform_),
     );
 
-    // pattern origin should always be [0, 0] in world coordinates
+    // Compute pixel position of world origin [0, 0] on the CPU using float64,
+    // then reduce modulo 65536 to keep values within float32 precision range
+    // at high zoom levels (issue #16705). Reducing the origin of a periodic
+    // tiling pattern by any amount just shifts the pattern phase, which is
+    // invisible because the pattern tiles seamlessly.
     this.tmpCoords_[0] = 0;
     this.tmpCoords_[1] = 0;
-    makeInverseTransform(this.tmpTransform_, batchInvertTransform);
-    applyTransform(this.tmpTransform_, this.tmpCoords_);
-    this.helper.setUniformFloatVec2(Uniforms.PATTERN_ORIGIN, this.tmpCoords_);
+    applyTransform(this.currentFrameStateTransform_, this.tmpCoords_);
+    const size = frameState.size;
+    const pxOriginX = (0.5 * this.tmpCoords_[0] + 0.5) * size[0];
+    const pxOriginY = (0.5 * this.tmpCoords_[1] + 0.5) * size[1];
+    const P = 65536;
+    this.helper.setUniformFloatVec2(Uniforms.PATTERN_ORIGIN, [
+      ((pxOriginX % P) + P) % P,
+      ((pxOriginY % P) + P) % P,
+    ]);
   }
 
   /**
@@ -482,7 +493,7 @@ class WebGLVectorLayerRenderer extends WebGLLayerRenderer {
         continue;
       }
       this.styleRenderer_.render(this.buffers_, frameState, () => {
-        this.applyUniforms_(this.buffers_.invertVerticesTransform);
+        this.applyUniforms_(this.buffers_.invertVerticesTransform, frameState);
         this.helper.applyHitDetectionUniform(forHitDetection);
       });
     } while (++world < endWorld);

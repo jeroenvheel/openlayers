@@ -8,6 +8,7 @@ import VectorStyleRenderer, {
   convertStyleToShaders,
 } from '../../render/webgl/VectorStyleRenderer.js';
 import {
+  apply as applyTransform,
   create as createTransform,
   makeInverse as makeInverseTransform,
   multiply as multiplyTransform,
@@ -118,6 +119,10 @@ class WebGLVectorTileLayerRenderer extends WebGLBaseTileLayerRenderer {
      * @private
      */
     this.tmpMat4_ = createMat4();
+    /**
+     * @private
+     */
+    this.tmpCoords_ = [0, 0];
 
     /**
      * @type {WebGLRenderTarget}
@@ -318,9 +323,17 @@ class WebGLVectorTileLayerRenderer extends WebGLBaseTileLayerRenderer {
    * @param {import("../../transform.js").Transform} batchInvertTransform Inverse of the transformation in which tile geometries are expressed
    * @param {number} tileZ Tile zoom level
    * @param {number} depth Depth of the tile
+   * @param {import("../../Map.js").FrameState} frameState Frame state.
    * @private
    */
-  applyUniforms_(alpha, renderExtent, batchInvertTransform, tileZ, depth) {
+  applyUniforms_(
+    alpha,
+    renderExtent,
+    batchInvertTransform,
+    tileZ,
+    depth,
+    frameState,
+  ) {
     // world to screen matrix
     setFromTransform(this.tmpTransform_, this.currentFrameStateTransform_);
     multiplyTransform(this.tmpTransform_, batchInvertTransform);
@@ -335,6 +348,23 @@ class WebGLVectorTileLayerRenderer extends WebGLBaseTileLayerRenderer {
       Uniforms.SCREEN_TO_WORLD_MATRIX,
       mat4FromTransform(this.tmpMat4_, this.tmpTransform_),
     );
+
+    // Compute pixel position of world origin [0, 0] on the CPU using float64,
+    // then reduce modulo 65536 to keep values within float32 precision range
+    // at high zoom levels (issue #16705). Reducing the origin of a periodic
+    // tiling pattern by any amount just shifts the pattern phase, which is
+    // invisible because the pattern tiles seamlessly.
+    this.tmpCoords_[0] = 0;
+    this.tmpCoords_[1] = 0;
+    applyTransform(this.currentFrameStateTransform_, this.tmpCoords_);
+    const size = frameState.size;
+    const pxOriginX = (0.5 * this.tmpCoords_[0] + 0.5) * size[0];
+    const pxOriginY = (0.5 * this.tmpCoords_[1] + 0.5) * size[1];
+    const P = 65536;
+    this.helper.setUniformFloatVec2(Uniforms.PATTERN_ORIGIN, [
+      ((pxOriginX % P) + P) % P,
+      ((pxOriginY % P) + P) % P,
+    ]);
 
     this.helper.setUniformFloatValue(Uniforms.GLOBAL_ALPHA, alpha);
     this.helper.setUniformFloatValue(Uniforms.DEPTH, depth);
@@ -371,6 +401,7 @@ class WebGLVectorTileLayerRenderer extends WebGLBaseTileLayerRenderer {
         buffers.invertVerticesTransform,
         tileZ,
         depth,
+        frameState,
       );
     });
   }

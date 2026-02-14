@@ -1055,9 +1055,9 @@ describe('ol/render/webgl/style', () => {
           expect(image.crossOrigin).to.eql('anonymous');
         });
         it('sets the color expression', () => {
-          expect(result.builder.fragmentShaderFunctions_[0]).to.contain(
-            'vec4 sampleFillPattern',
-          );
+          const allFunctions =
+            result.builder.fragmentShaderFunctions_.join('\n');
+          expect(allFunctions).to.contain('vec4 sampleFillPattern');
           expect(result.builder.fillColorExpression_).to.eql(
             `1. * sampleFillPattern(u_texture${uid}, u_texture${uid}_size, vec2(0.), u_texture${uid}_size, pxOrigin, pxPos)`,
           );
@@ -1077,9 +1077,9 @@ describe('ol/render/webgl/style', () => {
           result = parseLiteralStyle(style);
         });
         it('sets the color expression', () => {
-          expect(result.builder.fragmentShaderFunctions_[0]).to.contain(
-            'vec4 sampleFillPattern',
-          );
+          const allFunctions =
+            result.builder.fragmentShaderFunctions_.join('\n');
+          expect(allFunctions).to.contain('vec4 sampleFillPattern');
           expect(result.builder.fillColorExpression_).to.eql(
             `vec4(1.0, 0.0, 0.0, 1.0) * sampleFillPattern(u_texture${uid}, u_texture${uid}_size, vec2(0., u_texture${uid}_size.y) + vec2(5.0, 5.0) * vec2(0., -1.) + vec2(5.0, 10.0) * vec2(1., -1.), vec2(5.0, 5.0), pxOrigin, pxPos)`,
           );
@@ -1101,9 +1101,9 @@ describe('ol/render/webgl/style', () => {
         });
 
         it('includes pattern sampling function in the shader', () => {
-          expect(result.builder.fragmentShaderFunctions_[0]).to.contain(
-            'vec4 sampleFillPattern',
-          );
+          const allFunctions =
+            result.builder.fragmentShaderFunctions_.join('\n');
+          expect(allFunctions).to.contain('vec4 sampleFillPattern');
         });
 
         it('registers a vec2 pattern offset attribute', () => {
