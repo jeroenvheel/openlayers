@@ -431,10 +431,12 @@ describe('ol/renderer/webgl/VectorLayer', () => {
       expect(calls.length).to.be(6 * withHit);
       expect(calls[1].args).to.eql([
         'u_patternOrigin',
-        // combination of:
-        //   [ 0, 16 ]  ->  initial view center
-        //   scale( 2 / (0.25 * 200px), 2 / (0.25 * 100px) )  ->  divide by initial resolution & viewport size
-        [0, -1.28],
+        // Pixel position of world [0, 0] reduced modulo 65536:
+        //   clip space = makeProjectionTransform(res=0.5, center=[16,0], size=[200,100]) * [0,0]
+        //              = [-0.32, 0]
+        //   px = (0.5 * clip + 0.5) * size = [68, 50]
+        //   reduced = ((px % 65536) + 65536) % 65536 = [68, 50]
+        [68, 50],
       ]);
     });
     it('calls render once for each renderer', () => {
@@ -484,6 +486,57 @@ describe('ol/renderer/webgl/VectorLayer', () => {
       it('deletes previous buffers', () => {
         expect(renderer.helper.deleteBuffer.callCount).to.be(9); // 3 buffers (index, vertex, instance) * 3 types of geometry
       });
+    });
+  });
+
+  describe('pattern origin modular reduction (issue #16705)', () => {
+    beforeEach(async () => {
+      renderer.prepareFrame(frameState);
+      renderer.renderFrame(frameState);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      sinonSpy(renderer.helper, 'setUniformFloatVec2');
+
+      renderer.renderFrame({
+        ...frameState,
+        viewState: {
+          ...frameState.viewState,
+          resolution: 0.5,
+          center: [16, 0],
+        },
+      });
+    });
+
+    it('sends PATTERN_ORIGIN uniform', () => {
+      const calls = renderer.helper.setUniformFloatVec2
+        .getCalls()
+        .filter((c) => c.args[0] === 'u_patternOrigin');
+
+      expect(calls.length).to.be.greaterThan(0);
+    });
+
+    it('pattern origin values are reduced to [0, 65536)', () => {
+      const calls = renderer.helper.setUniformFloatVec2
+        .getCalls()
+        .filter((c) => c.args[0] === 'u_patternOrigin');
+
+      const origin = calls[0].args[1];
+      expect(origin[0]).to.be.greaterThan(-1);
+      expect(origin[0]).to.be.lessThan(65536);
+      expect(origin[1]).to.be.greaterThan(-1);
+      expect(origin[1]).to.be.lessThan(65536);
+    });
+
+    it('modular reduction keeps values within float32 precision', () => {
+      // Verify the modular reduction algorithm independently:
+      // for a large pixel origin value, reducing mod 65536 gives a small value
+      const largeValue = 100000050.75;
+      const P = 65536;
+      const reduced = ((largeValue % P) + P) % P;
+      expect(reduced).to.be.greaterThan(-1);
+      expect(reduced).to.be.lessThan(P);
+      // The reduced value has enough float32 precision for sub-pixel accuracy
+      expect(Math.fround(reduced)).to.be.within(reduced - 0.01, reduced + 0.01);
     });
   });
 

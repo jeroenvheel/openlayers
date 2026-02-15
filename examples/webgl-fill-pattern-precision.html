@@ -1,0 +1,26 @@
+---
+layout: example.html
+title: WebGL Fill Pattern Precision
+shortdesc: Fill patterns stay crisp at high zoom levels using CPU-side modular reduction
+docs: >
+  This example demonstrates WebGL fill-pattern rendering at extreme zoom levels.
+
+  At zoom levels beyond ~17, world-to-pixel conversions produce values exceeding 100 million pixels.
+  With standard float32 shader arithmetic, this causes catastrophic precision loss: the <code>mod()</code>
+  operation that tiles the pattern receives garbage inputs, resulting in corrupted or noisy patterns.
+
+  The fix computes the pattern origin on the <strong>CPU in float64</strong> and reduces it
+  modulo 65536 before passing it to the GPU. Since the fill pattern tiles seamlessly, shifting
+  the origin by any multiple of the tile period is invisible &mdash; so the reduced value produces
+  identical results while staying well within float32 precision.
+
+  Try zooming in on the map below &mdash; the checkerboard and stripe patterns remain sharp
+  even at zoom 22+, where pixel positions exceed 200 million.
+tags: "webgl, pattern, fill, precision, vector"
+experimental: true
+---
+<div id="map" class="map"></div>
+<div id="info">
+  <span id="zoom-display"></span>
+  <span id="pixel-display"></span>
+</div>
